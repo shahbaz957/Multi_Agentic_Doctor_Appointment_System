@@ -27,4 +27,84 @@ class DoctorAppointmentAgent:
         llm_model = LLMModel()
         self.llm_model = llm_model.get_model()
     def supervisor_node (self , state : AgentState) -> Command[Literal['information_node' , 'booking_node' , "__end__"]]:
+        messages = [
+            {"role" : "system" , "content" : system_prompt},
+            {"role" : "user" , "content" : f"User's Identification Number is {state['id_number']}"}
+        ] + state['messages']
+
+        query = state['messages'][0] if len(state['messages'])== 1 else ""
+        response = self.llm_model.with_structured_output(Router).invoke(messages)
+
+        goto = response['next']
+        if (response['next'] == 'FINISH'):
+            goto = END
+
+        if (query) :
+            return Command(goto = goto , update={
+                "query" : query,
+                "messages" : [HumanMessage(content=f'User Identification Number is {state['id_number']}')],
+                "current_reasoning" : response['reasoning'],
+                "next" : goto ## Information for the Next Node
+            })
+        return Command(goto = goto , update= {
+            "next" : goto,
+            "current_reasoning" : response['reasoning']
+        })
+    def information_node(self , state:AgentState) -> Literal['supervisor_node']:
+             print("*********************** Calling Information Node ************************")
+             system_prompt = "You are specialized agent to provide information related to availability of doctors or any FAQs related to hospital based on the query. You have access to the tool.\n Make sure to ask user politely if you need any further information to execute the tool.\n For your information, Always consider current year is 2024."
+             system_prompt = ChatPromptTemplate.from_messages([
+                  ('system' , system_prompt),
+                  ('placeholder' , '{messages}')
+             ])
+
+             information_agent = create_react_agent(model = self.llm_model , tools=[check_availability_by_doctor , check_availability_by_specialization] , prompt=system_prompt )
+
+             result = information_agent.invoke(state)
+             return Command(
+                  update = {
+                       "messages" : state['messages'] + 
+                       [AIMessage(content=result['messages'][-1].content , name = 'information_node')]
+                  },
+                  goto = 'supervisor_node'
+             )
+    
+
+    def booking_node(self, state: AgentState) -> Command[Literal['supervisor_node']]:
+        print("*****************called booking node************")
+    
+        system_prompt = "You are specialized agent to set, cancel or reschedule appointment based on the query. You have access to the tool.\n Make sure to ask user politely if you need any further information to execute the tool.\n For your information, Always consider current year is 2024."
         
+        system_prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        system_prompt
+                    ),
+                    (
+                        "placeholder", 
+                        "{messages}"
+                    ),
+                ]
+            )
+        booking_agent = create_react_agent(model=self.llm_model,tools=[set_appointment,cancel_appointment,reschedule_appointment],prompt=system_prompt)
+
+        result = booking_agent.invoke(state)
+        
+        return Command(
+            update={
+                "messages": state["messages"] + [
+                    AIMessage(content=result["messages"][-1].content, name="booking_node")
+                    #HumanMessage(content=result["messages"][-1].content, name="booking_node")
+                ]
+            },
+            goto="supervisor_node",
+        )
+    def workflow (self) :
+        self.graph = StateGraph(AgentState)
+        self.graph.add_node("supervisor_node" , self.supervisor_node)
+        self.graph.add_node('information_node' , self.information_node)
+        self.graph.add_node("booking_node" , self.booking_node)
+        self.graph.add_edge(START , "supervisor_node")
+        self.app = self.graph.compile()
+        return self.app
