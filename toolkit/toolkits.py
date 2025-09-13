@@ -1,0 +1,147 @@
+import pandas as pd
+from typing import Literal
+from langchain_core.tools import tool
+from data_models.models import DateModel , IdentificationNumberModel , DateTimeModel
+
+@tool
+def check_availability_by_doctor(
+    desired_date: DateModel,
+    doctor_name: Literal[
+        'kevin anderson','robert martinez','susan davis','daniel miller',
+        'sarah wilson','michael green','lisa brown','jane smith',
+        'emily johnson','john doe'
+    ]
+):
+    """Checking the availability of doctors by given date
+       The parameters should be given in the user query which is date.
+    """
+    df = pd.read_csv(
+        r'S:\AI_AGENTS\Python_N_Env\Medical_Appointment_Assistant\data\doctor_availability.csv'
+    )
+    df['date_slot_time'] = df['date_slot'].apply(lambda x: x.split(" ")[-1])
+    df['date_only'] = df['date_slot'].apply(lambda x: x.split(" ")[0])
+
+    rows = list(
+        df[
+            (df['date_only'] == desired_date.date) &
+            (df['doctor_name'] == doctor_name) &
+            (df['is_available'] == True)
+        ]['date_slot_time']
+    )
+
+    if (len(rows) == 0):
+        output = "No availability for the Entire Day"
+    else : 
+        output += f'Availablity Time Are Following for {desired_date.date} \n'
+        output +=  "Available Slots " +", ".join(rows)
+
+    return rows
+
+
+@tool 
+def check_availability_by_specialization(desired_date : DateModel , specialization : Literal["general_dentist", "cosmetic_dentist", "prosthodontist", "pediatric_dentist","emergency_dentist","oral_surgeon","orthodontist"]):
+    """
+    Checking the database if we have availability for the specific specialization.
+    The parameters should be mentioned by the user in the query
+    """
+    df = pd.read_csv(
+        r'S:\AI_AGENTS\Python_N_Env\Medical_Appointment_Assistant\data\doctor_availability.csv'
+    )
+    df['date_slot_time'] = df['date_slot'].apply(lambda input : input.split(" ")[-1])
+    df['available_date'] = df['date_slot'].apply(lambda input : input.split(" ")[0])
+
+    rows = list(df[ df['available_date'] == desired_date & df['specialization'] == specialization & df['is_available'] == True].groupby(['specialization' , 'doctor_name']['date_slot_time']).reset_index(name = "available_slots"))
+    if (len(rows) == 0 ):
+        output = "No Available Slot is Present. Take Appointment Later. Thank you for Reaching us"
+    else:
+        def convert_am_and_pm(date) :
+            date = str(date)
+            hours , minutes = map(int , date.split(":"))
+            period = "AM" if hours < 12 else "PM"
+            
+            hours = hours % 12
+            return f'{hours}:{minutes} {period}'
+        
+        output += f"Available Time for {desired_date.date} \n"
+        for row in rows.values:
+            output += str(row[1])+ "Available Slots \n" + ", \n".join([convert_am_and_pm(time) for time in row[2]])+ '\n'
+
+    return output
+
+
+@tool
+def set_appointment(desired_date : DateModel , patientId : IdentificationNumberModel , doctor_name : Literal['kevin anderson','robert martinez','susan davis','daniel miller','sarah wilson','michael green','lisa brown','jane smith','emily johnson','john doe'] ) :
+
+    """
+    Set appointment or slot with the doctor.
+    The parameters MUST be mentioned by the user in the query.
+    """
+    df = pd.read_csv(
+        r'S:\AI_AGENTS\Python_N_Env\Medical_Appointment_Assistant\data\doctor_availability.csv'
+    )
+    from datetime import datetime
+    def convert_datetime_format(dt_str):
+
+        dt = datetime.strptime(dt_str, "%d-%m-%Y %H:%M")
+
+        return dt.strftime("%d-%m-%Y %#H.%M")
+    
+    appoint = df[df['date_slot'] == convert_datetime_format(desired_date) & df['doctor_name'] == doctor_name & df['is_available'] == True]
+    if (len(appoint) == 0) : 
+        return "No Available Slot on your Desired Time. Please Contact After Some Days"
+    else:
+        df.loc[df['date_slot'] == convert_datetime_format(desired_date) & df['doctor_name'] == doctor_name & df['is_available'] == True , ['is_availble', 'patient_to_attent']] = [False , patientId]
+        df.to_csv('availability.csv' ,index = True)
+
+        return "Successfully Done"
+    
+
+@tool
+def cancel_appointment(date:DateTimeModel, id_number:IdentificationNumberModel, doctor_name:Literal['kevin anderson','robert martinez','susan davis','daniel miller','sarah wilson','michael green','lisa brown','jane smith','emily johnson','john doe']):
+    """
+    Canceling an appointment.
+    The parameters MUST be mentioned by the user in the query.
+    """
+    df = pd.read_csv(r'S:\AI_AGENTS\Python_N_Env\Medical_Appointment_Assistant\data\doctor_availability.csv')
+    case_to_remove = df[(df['date_slot'] == date.date)&(df['patient_to_attend'] == id_number.id)&(df['doctor_name'] == doctor_name)]
+    if len(case_to_remove) == 0:
+        return "You dont have any appointment with that specifications"
+    else:
+        df.loc[(df['date_slot'] == date.date) & (df['patient_to_attend'] == id_number.id) & (df['doctor_name'] == doctor_name), ['is_available', 'patient_to_attend']] = [True, None]
+        df.to_csv(f'availability.csv', index = False)
+
+        return "Successfully cancelled"
+    
+@tool
+def reschedule_appointment(old_date:DateTimeModel, new_date:DateTimeModel, id_number:IdentificationNumberModel, doctor_name:Literal['kevin anderson','robert martinez','susan davis','daniel miller','sarah wilson','michael green','lisa brown','jane smith','emily johnson','john doe']):
+    """
+    Rescheduling an appointment.
+    The parameters MUST be mentioned by the user in the query.
+    """
+    df = pd.read_csv(r'S:\AI_AGENTS\Python_N_Env\Medical_Appointment_Assistant\data\doctor_availability.csv')
+    available_for_desired_date = df[(df['date_slot'] == new_date.date)&(df['is_available'] == True)&(df['doctor_name'] == doctor_name)]
+    if len(available_for_desired_date) == 0:
+        return "Not available slots in the desired period"
+    else:
+        cancel_appointment.invoke({'date':old_date, 'id_number':id_number, 'doctor_name':doctor_name})
+        set_appointment.invoke({'desired_date':new_date, 'id_number': id_number, 'doctor_name': doctor_name})
+        return "Successfully rescheduled for the desired time"
+
+    
+
+
+
+
+
+
+
+
+
+
+
+print(
+    check_availability_by_doctor.invoke({
+        "desired_date": {"date": "19-08-2024"},
+        "doctor_name": "emily johnson"
+    })
+)

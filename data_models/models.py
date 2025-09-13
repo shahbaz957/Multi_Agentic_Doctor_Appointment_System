@@ -1,7 +1,7 @@
 import re
 from pydantic import BaseModel , Field , field_validator
 
-class DataTimeModel(BaseModel) : # this is not OOP like class
+class DateTimeModel(BaseModel) : # this is not OOP like class
     date : str = Field(description="Properly Formated Date and Time" ,  pattern=r'^\d{2}-\d{2}-\d{4} \d{2}:\d{2}$')
     @field_validator("date")
     def check_date_time(cls , v):
