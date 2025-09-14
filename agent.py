@@ -8,12 +8,12 @@ from langgraph.graph import START, StateGraph, END
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage, AIMessage
 from prompt_library.prompt import system_prompt
-from utils.llms import LLMModel
+from utils.llms import LLM_Model
 from toolkit.toolkits import *
 
 class Router(TypedDict):
     next : Literal['information_node' , "booking_node" , "FINISH"]
-    resoning : str
+    reasoning : str
 
 class AgentState(TypedDict) : 
     messages : Annotated[list[Any] , add_messages] # where add_messages is a reducer that only just append messages in List any kind of message like AiMessage , HumanMessage , System_Message
@@ -24,7 +24,7 @@ class AgentState(TypedDict) :
 
 class DoctorAppointmentAgent:
     def __init__(self ):
-        llm_model = LLMModel()
+        llm_model = LLM_Model()
         self.llm_model = llm_model.get_model()
     def supervisor_node (self , state : AgentState) -> Command[Literal['information_node' , 'booking_node' , "__end__"]]:
         messages = [
@@ -32,7 +32,7 @@ class DoctorAppointmentAgent:
             {"role" : "user" , "content" : f"User's Identification Number is {state['id_number']}"}
         ] + state['messages']
 
-        query = state['messages'][0] if len(state['messages'])== 1 else ""
+        query = state['messages'][0].content if len(state['messages'])== 1 else ""
         response = self.llm_model.with_structured_output(Router).invoke(messages)
 
         goto = response['next']
@@ -42,7 +42,7 @@ class DoctorAppointmentAgent:
         if (query) :
             return Command(goto = goto , update={
                 "query" : query,
-                "messages" : [HumanMessage(content=f'User Identification Number is {state['id_number']}')],
+                "messages" : state['messages'] + [HumanMessage(content=f"User Identification Number is {state['id_number']}")],
                 "current_reasoning" : response['reasoning'],
                 "next" : goto ## Information for the Next Node
             })
@@ -51,23 +51,30 @@ class DoctorAppointmentAgent:
             "current_reasoning" : response['reasoning']
         })
     def information_node(self , state:AgentState) -> Literal['supervisor_node']:
-             print("*********************** Calling Information Node ************************")
-             system_prompt = "You are specialized agent to provide information related to availability of doctors or any FAQs related to hospital based on the query. You have access to the tool.\n Make sure to ask user politely if you need any further information to execute the tool.\n For your information, Always consider current year is 2024."
-             system_prompt = ChatPromptTemplate.from_messages([
-                  ('system' , system_prompt),
-                  ('placeholder' , '{messages}')
-             ])
+        print("*********************** Calling Information Node ************************")
+        system_prompt = "You are specialized agent to provide information related to availability of doctors or any FAQs related to hospital based on the query. You have access to the tool.\n Make sure to ask user politely if you need any further information to execute the tool.\n For your information, Always consider current year is 2024."
+        
+        system_prompt = ChatPromptTemplate.from_messages([
+            ('system' , system_prompt),
+            ('placeholder' , '{messages}')
+        ])
 
-             information_agent = create_react_agent(model = self.llm_model , tools=[check_availability_by_doctor , check_availability_by_specialization] , prompt=system_prompt )
+        information_agent = create_react_agent(
+            model=self.llm_model,
+            tools=[check_availability_by_doctor, check_availability_by_specialization],
+            prompt=system_prompt
+        )
 
-             result = information_agent.invoke(state)
-             return Command(
-                  update = {
-                       "messages" : state['messages'] + 
-                       [AIMessage(content=result['messages'][-1].content , name = 'information_node')]
-                  },
-                  goto = 'supervisor_node'
-             )
+        result = information_agent.invoke(state)
+        
+        return Command(
+            update={
+                "messages": state["messages"] + [
+                    AIMessage(content=result["messages"][-1].content, name="information_node")
+                ]
+            },
+            goto="supervisor_node"
+        )
     
 
     def booking_node(self, state: AgentState) -> Command[Literal['supervisor_node']]:

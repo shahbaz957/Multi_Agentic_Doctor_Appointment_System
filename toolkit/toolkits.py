@@ -5,7 +5,7 @@ from data_models.models import DateModel , IdentificationNumberModel , DateTimeM
 
 @tool
 def check_availability_by_doctor(
-    desired_date: DateModel,
+    date: DateModel,
     doctor_name: Literal[
         'kevin anderson','robert martinez','susan davis','daniel miller',
         'sarah wilson','michael green','lisa brown','jane smith',
@@ -23,7 +23,7 @@ def check_availability_by_doctor(
 
     rows = list(
         df[
-            (df['date_only'] == desired_date.date) &
+            (df['date_only'] == date.date) &
             (df['doctor_name'] == doctor_name) &
             (df['is_available'] == True)
         ]['date_slot_time']
@@ -32,10 +32,10 @@ def check_availability_by_doctor(
     if (len(rows) == 0):
         output = "No availability for the Entire Day"
     else : 
-        output += f'Availablity Time Are Following for {desired_date.date} \n'
+        output = f'Availablity Time Are Following for {date.date} \n'
         output +=  "Available Slots " +", ".join(rows)
 
-    return rows
+    return output
 
 
 @tool 
@@ -50,7 +50,16 @@ def check_availability_by_specialization(desired_date : DateModel , specializati
     df['date_slot_time'] = df['date_slot'].apply(lambda input : input.split(" ")[-1])
     df['available_date'] = df['date_slot'].apply(lambda input : input.split(" ")[0])
 
-    rows = list(df[ df['available_date'] == desired_date & df['specialization'] == specialization & df['is_available'] == True].groupby(['specialization' , 'doctor_name']['date_slot_time']).reset_index(name = "available_slots"))
+    rows = (
+    df[
+        (df['available_date'] == desired_date.date) &
+        (df['specialization'] == specialization) &
+        (df['is_available'] == True)
+    ]
+    .groupby(['specialization', 'doctor_name'])['date_slot_time']
+    .apply(list)
+    .reset_index(name="available_slots")
+)
     if (len(rows) == 0 ):
         output = "No Available Slot is Present. Take Appointment Later. Thank you for Reaching us"
     else:
@@ -62,7 +71,7 @@ def check_availability_by_specialization(desired_date : DateModel , specializati
             hours = hours % 12
             return f'{hours}:{minutes} {period}'
         
-        output += f"Available Time for {desired_date.date} \n"
+        output = f"Available Time for {desired_date.date} \n"
         for row in rows.values:
             output += str(row[1])+ "Available Slots \n" + ", \n".join([convert_am_and_pm(time) for time in row[2]])+ '\n'
 
@@ -127,21 +136,4 @@ def reschedule_appointment(old_date:DateTimeModel, new_date:DateTimeModel, id_nu
         set_appointment.invoke({'desired_date':new_date, 'id_number': id_number, 'doctor_name': doctor_name})
         return "Successfully rescheduled for the desired time"
 
-    
 
-
-
-
-
-
-
-
-
-
-
-print(
-    check_availability_by_doctor.invoke({
-        "desired_date": {"date": "19-08-2024"},
-        "doctor_name": "emily johnson"
-    })
-)
