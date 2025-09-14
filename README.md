@@ -61,7 +61,7 @@ doctor-appointment-automation/
 - **LinkedIn**: [Mirza Shahbaz Ali Baig](https://www.linkedin.com/in/mirza-shahbaz-ali-baig-3391b3248/)
 
 ## Contact
-For questions or support, reach out at [your-email@example.com](mailto:mirzashahbazbaig724@gmail.com).
+For questions or support, reach out at [mirzashahbazbaig724@gmail.com](mailto:mirzashahbazbaig724@gmail.com).
 
 ---
 
