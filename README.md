@@ -21,8 +21,8 @@ This repository showcases a robust solution for automating doctor appointments, 
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/doctor-appointment-automation.git
-   cd doctor-appointment-automation
+   git clone https://github.com/shahbaz957/Multi_Agentic_Doctor_Appointment_System.git
+   cd Multi_Agentic_Doctor_Appointment_System
    ```
 2. Install dependencies:
    ```bash
